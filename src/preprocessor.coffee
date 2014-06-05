@@ -36,6 +36,7 @@ cPreProcessor = (source, filename, indent = "") ->
   sd = false # start directive
   iftrue = false # width ifactive, if true, copy text on
   os = false
+  ba = false
   ifactive = 0 # active use block
   ad = -1    # active dirrective
   i  = -1
@@ -59,13 +60,14 @@ cPreProcessor = (source, filename, indent = "") ->
   while i++ < l
     c = source.charAt(i)
     if c is '\\' # if after backslash new line split into line
-      if source.charAt(i + 1) is '\n'
-        i += 2
-        continue
-      else if source.substr(i + 1, 2) is '\r\n'
+      if source.substr(i + 1, 2) is '\n#'
         i += 3
         continue
-    unless ifactive is 0 or iftrue
+      else if source.substr(i + 1, 2) is '\r\n#'
+        i += 4
+        continue
+    ba = ifactive is 0 or iftrue
+    unless ba
       s = true
     switch c
       when "'", "`" # single quotes, js source
@@ -80,7 +82,7 @@ cPreProcessor = (source, filename, indent = "") ->
         if source.charAt(i+1) is c and source.charAt(i+2) is c # if /// detected
           f = if c is '/' then 0b01000 else 0b100
           i += 2
-          out += c + c if ifactive is 0 or iftrue
+          out += c + c if ba
         unless cl
           if q is 0
             q = f
@@ -91,7 +93,7 @@ cPreProcessor = (source, filename, indent = "") ->
         if source.charAt(i+1) is c and source.charAt(i+2) is c # if ### detected
           f = 0b10000
           i += 2
-          out += '##' if ifactive is 0 or iftrue
+          out += '##' if ba
         else if source.charAt(i+1) isnt '@' # comment detected
           cl = true
         else unless cl
@@ -208,7 +210,7 @@ cPreProcessor = (source, filename, indent = "") ->
         buf = ''
       s = true
     else
-      if ifactive is 0 or iftrue
+      if ba
         if an.test c
           word += c
         else
@@ -230,7 +232,8 @@ cPreProcessor = (source, filename, indent = "") ->
       c += indent
       cl = false
       word = ''
-      out += buf
+      if ba
+        out += buf
       buf = indent
     unless s
       buf += c
