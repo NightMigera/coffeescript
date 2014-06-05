@@ -138,6 +138,7 @@ compilePath = (source, topLevel, base) ->
       code = fs.readFileSync source
     catch err
       if err.code is 'ENOENT' then return else throw err
+    # search include and defines
     compileScript(source, code.toString(), base)
   else
     notSources[source] = yes
@@ -228,7 +229,7 @@ watch = (source, base) ->
     try
       rewatch()
       compile()
-    catch
+    catch e
       removeSource source, base
       compileJoin()
 

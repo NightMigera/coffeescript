@@ -1832,8 +1832,7 @@ exports.Try = class Try extends Base
     else
       []
 
-    ensurePart = if @ensure then ([].concat @makeCode(" finally {\n"), @ensure.compileToFragments(o, LEVEL_TOP),
-      @makeCode("\n#{@tab}}")) else []
+    ensurePart = if @ensure then ([].concat @makeCode(" finally {\n"), @ensure.compileToFragments(o, LEVEL_TOP), @makeCode("\n#{@tab}}")) else []
 
     [].concat @makeCode("#{@tab}try {\n"),
       tryPart,
