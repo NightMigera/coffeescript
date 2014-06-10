@@ -1,5 +1,6 @@
 fs = require 'fs'
 path = require 'path'
+makros = {}
 
 cPreProcessor = (source, filename, indent = "") ->
   directives = [
@@ -13,7 +14,6 @@ cPreProcessor = (source, filename, indent = "") ->
     'ifdef'
     'ifndef'
   ]
-  makros = {}
   word = ''
   an = /\w/
   qt = /'|"/
@@ -34,10 +34,11 @@ cPreProcessor = (source, filename, indent = "") ->
   cl = false # comment line
   d = false # dirrective
   sd = false # start directive
-  iftrue = false # width ifactive, if true, copy text on
   os = false
   ba = false
+  iftrue = false # width ifactive, if true, copy text on
   ifactive = 0 # active use block
+  ifpassed = false # if find active block for else and elif
   ad = -1    # active dirrective
   i  = -1
   l = source.length
@@ -170,11 +171,20 @@ cPreProcessor = (source, filename, indent = "") ->
             ifactive++
             if eval word
               iftrue = true
+              ifpassed = true
           when 4
           # elif
             if ifactive is 0
               console.error "elif without #if in #{filename}:#{line}"
               return ""
+            if ifpassed
+              i = source.lastIndexOf("\n", source.indexOf("#@endif", i))
+              ad = -1
+              d = false
+              word = ''
+              buf = ''
+              iftrue = false
+              continue
             if iftrue
               iftrue = false
             else if eval word
@@ -184,6 +194,14 @@ cPreProcessor = (source, filename, indent = "") ->
             if ifactive is 0
               console.error "else without #if in #{filename}:#{line}"
               return ""
+            if ifpassed
+              i = source.lastIndexOf("\n", source.indexOf("#@endif", i))
+              ad = -1
+              d = false
+              word = ''
+              buf = ''
+              iftrue = false
+              continue
             iftrue = not iftrue
           when 6
           # endif
@@ -193,14 +211,15 @@ cPreProcessor = (source, filename, indent = "") ->
             unless sl.test word
               console.warn "endif not empty in #{filename}:#{line}"
             ifactive--
+            ifpassed = ifactive isnt 0
           when 7
           # ifdef
             ifactive++
-            iftrue = (makros.hasOwnProperty(word) and makros[word]?)
+            ifpassed = iftrue = (makros.hasOwnProperty(word) and makros[word]?)
           when 8
           # ifndef
             ifactive++
-            iftrue = not (makros.hasOwnProperty(word) and makros[word]?)
+            ifpassed = iftrue = not (makros.hasOwnProperty(word) and makros[word]?)
           else
             console.log "What!? in #{filename}:#{line}"
         # clean
@@ -242,5 +261,7 @@ cPreProcessor = (source, filename, indent = "") ->
   if c is ""
     out += buf
   out # return cPreProcessor
+
+
 
 module.exports = cPreProcessor
