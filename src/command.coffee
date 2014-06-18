@@ -6,6 +6,7 @@
 
 # External dependencies.
 fs             = require 'fs'
+pp             = require './preprocessor'
 path           = require 'path'
 helpers        = require './helpers'
 optparse       = require './optparse'
@@ -133,13 +134,12 @@ compilePath = (source, topLevel, base) ->
     sources.push source
     sourceCode.push null
     delete notSources[source]
-    watch source, base if opts.watch
+    wr = watch source, base if opts.watch
     try
       code = fs.readFileSync source
     catch err
       if err.code is 'ENOENT' then return else throw err
-    # search include and defines
-    compileScript(source, code.toString(), base)
+    compileScript(source, code.toString(), base, wr)
   else
     notSources[source] = yes
 
@@ -156,7 +156,9 @@ findDirectoryIndex = (source) ->
 # Compile a single source script, containing the given code, according to the
 # requested options. If evaluating the script directly sets `__filename`,
 # `__dirname` and `module.filename` to be correct relative to the script's path.
-compileScript = (file, input, base = null) ->
+compileScript = (file, input, base = null, watcher = null) ->
+  # search include and defines
+  input = pp input, file, watcher
   o = opts
   options = compileOptions file, base
   try
@@ -233,18 +235,19 @@ watch = (source, base) ->
       removeSource source, base
       compileJoin()
 
-  compile = ->
+  compile = (force) ->
     clearTimeout compileTimeout
     compileTimeout = wait 25, ->
       fs.stat source, (err, stats) ->
         return watchErr err if err
-        return rewatch() if prevStats and
+        return rewatch() if force isnt true and
+                            prevStats and
                             stats.size is prevStats.size and
                             stats.mtime.getTime() is prevStats.mtime.getTime()
         prevStats = stats
         fs.readFile source, (err, code) ->
           return watchErr err if err
-          compileScript(source, code.toString(), base)
+          compileScript(source, code.toString(), base, watcher)
           rewatch()
 
   startWatcher = ->

@@ -1,6 +1,20 @@
 fs = require 'fs'
 path = require 'path'
 makros = {}
+watchers = {}
+gw = null
+gn = ''
+
+startWatcher = (watcher, path) ->
+  fileWatcher = fs.watch path
+  .on 'change', ->
+      watcher.emit 'change', true
+      fileWatcher?.close()
+      rewatch watcher, path
+      return
+
+rewatch = (watcher, path) ->
+  startWatcher watcher, path
 
 cPreProcessor = (source, filename, indent = "") ->
   directives = [
@@ -24,12 +38,13 @@ cPreProcessor = (source, filename, indent = "") ->
   buf = '' # line buffer
   f = 0
   q = 0b00000
-  # single quotes 0b000001
-  # double quotes 0b000010
-  # three qoutes  0b000100
-  # regexpr block 0b001000
-  # comment block 0b010000
-  # as js block   0b100000
+  # single quotes 0b0000001
+  # double quotes 0b0000010
+  # three qoutes  0b0000100
+  # regexpr block 0b0001000
+  # comment block 0b0010000
+  # as js block   0b0100000
+  # regex start   0b1000000
   s = false # skip
   cl = false # comment line
   d = false # dirrective
@@ -83,7 +98,9 @@ cPreProcessor = (source, filename, indent = "") ->
         if source.charAt(i+1) is c and source.charAt(i+2) is c # if /// detected
           f = if c is '/' then 0b01000 else 0b100
           i += 2
-          out += c + c if ba
+          buf += c + c if ba
+        else
+          f = if c is '/' then 0b1000000 else 0b10
         unless cl
           if q is 0
             q = f
@@ -91,18 +108,18 @@ cPreProcessor = (source, filename, indent = "") ->
             q = 0
         f = 0
       when '#'
+        if q isnt 0
+          os = true
+          break
         if source.charAt(i+1) is c and source.charAt(i+2) is c # if ### detected
           f = 0b10000
           i += 2
-          out += '##' if ba
+          buf += '##' if ba
         else if source.charAt(i+1) isnt '@' # comment detected
           cl = true
         else unless cl
           sd = true
-        if q is 0
-          q = f
-        else
-          q = 0
+        q = f
         if sd and q isnt 0b10000 # if #@ and not comment
           d = true # устанавливаем флаг диррективы
           s = true
@@ -145,7 +162,7 @@ cPreProcessor = (source, filename, indent = "") ->
               if word.charAt(0) isnt word.charAt(word.length-1)
                 console.error "Parse error: can't parse include path in #{filename}:#{line}"
                 return ''
-              p = word.substr(1, word.length-1)
+              p = word.substr(1, word.length - 2)
             else
               p = word + '.coffee'
             if p.charAt(0) isnt '/'
@@ -157,6 +174,8 @@ cPreProcessor = (source, filename, indent = "") ->
               console.error "before include exist character in #{filename}:#{line}"
               return ''
             out += buf + cPreProcessor fs.readFileSync(p).toString(), p, buf
+            if gw?
+              watchers[gn].push startWatcher gw, p
           when 1
           # define
             dm = word.trim().match def
@@ -262,6 +281,18 @@ cPreProcessor = (source, filename, indent = "") ->
     out += buf
   out # return cPreProcessor
 
+module.exports = (data, name, watcher) ->
+  if watcher?
+    if watchers[name]
+      for w in watchers[name]
+        w.close()
+    watchers[name] = []
+  gw = watcher or null
+  gn = name
 
+  ret = cPreProcessor data, name, ''
 
-module.exports = cPreProcessor
+  gw = null
+  gn = ''
+
+  ret
