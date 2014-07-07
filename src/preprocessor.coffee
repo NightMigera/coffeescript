@@ -1,17 +1,35 @@
 fs = require 'fs'
 path = require 'path'
 makros = {}
-watchers = {}
-gw = null
-gn = ''
+watchers = {} # watchers by filename
+gw = null # global watcher
+gn = '' # global name (path)
+timers = {}
+
+wait = (time, func) ->
+  setTimeout func, time
 
 startWatcher = (watcher, path) ->
-  fileWatcher = fs.watch path
-  .on 'change', ->
-      watcher.emit 'change', true
-      fileWatcher?.close()
-      rewatch watcher, path
-      return
+  globalWatcher = gw
+  globalName = gn
+  fs.exists path, (ya) ->
+    if ya
+      fileWatcher = fs.watch path
+      .on 'change', ->
+        unless timers[gn]?
+          timers[gn] = {}
+        unless timers[gn][path]?
+          timers[gn][path] = null
+        else
+          clearTimeout timers[gn][path]
+        timers[gn][path] = wait 25, ->
+          watcher.emit 'change', true
+          fileWatcher?.close()
+          rewatch watcher, path
+      if globalWatcher?
+        watchers[globalName].push fileWatcher
+    else
+      console.log "\x1B[1;31mFile not exists: \x1b[1;37m #{path}\x1B[0m\n"
 
 rewatch = (watcher, path) ->
   startWatcher watcher, path
@@ -62,7 +80,7 @@ cPreProcessor = (source, filename, indent = "") ->
     if value?
       makros[name] = value
     else
-      undef(name)
+      makros[name] = ''
     return
   undef = (name) ->
     if name isnt ''
@@ -71,7 +89,7 @@ cPreProcessor = (source, filename, indent = "") ->
       else
         console.warn "Index #{name} haven't in makros. Undef fail in #{filename}:#{line}"
     else
-      console.error "Undef is empty in #{filename}:#{line}"
+      console.warn "Undef is empty in #{filename}:#{line}"
 
   while i++ < l
     c = source.charAt(i)
@@ -160,7 +178,7 @@ cPreProcessor = (source, filename, indent = "") ->
             word = word.trim()
             if qt.test word.charAt(0)
               if word.charAt(0) isnt word.charAt(word.length-1)
-                console.error "Parse error: can't parse include path in #{filename}:#{line}"
+                console.warn "Parse error: can't parse include path in #{filename}:#{line}"
                 return ''
               p = word.substr(1, word.length - 2)
             else
@@ -168,19 +186,18 @@ cPreProcessor = (source, filename, indent = "") ->
             if p.charAt(0) isnt '/'
               p = path.dirname(filename) + '/' + p
             unless fs.existsSync p
-              console.error "include error: #{p} not exist in #{filename}:#{line}"
+              console.warn "include error: #{p} not exist in #{filename}:#{line}"
               return ''
             unless sl.test buf
-              console.error "before include exist character in #{filename}:#{line}"
+              console.warn "before include exist character in #{filename}:#{line}"
               return ''
             out += buf + cPreProcessor fs.readFileSync(p).toString(), p, buf
-            if gw?
-              watchers[gn].push startWatcher gw, p
+            startWatcher gw, p
           when 1
           # define
             dm = word.trim().match def
             unless dm?
-              console.error "Define #{word} fail in #{filename}:#{line}"
+              console.warn "Define #{word} fail in #{filename}:#{line}"
             define dm[1], dm[2]
           when 2
           # undef
@@ -194,7 +211,7 @@ cPreProcessor = (source, filename, indent = "") ->
           when 4
           # elif
             if ifactive is 0
-              console.error "elif without #if in #{filename}:#{line}"
+              console.warn "elif without #if in #{filename}:#{line}"
               return ""
             if ifpassed
               i = source.lastIndexOf("\n", source.indexOf("#@endif", i))
@@ -211,7 +228,7 @@ cPreProcessor = (source, filename, indent = "") ->
           when 5
           # else
             if ifactive is 0
-              console.error "else without #if in #{filename}:#{line}"
+              console.warn "else without #if in #{filename}:#{line}"
               return ""
             if ifpassed
               i = source.lastIndexOf("\n", source.indexOf("#@endif", i))
@@ -225,7 +242,7 @@ cPreProcessor = (source, filename, indent = "") ->
           when 6
           # endif
             if ifactive is 0
-              console.error "endif without #if in #{filename}:#{line}"
+              console.warn "endif without #if in #{filename}:#{line}"
               return ""
             unless sl.test word
               console.warn "endif not empty in #{filename}:#{line}"
@@ -285,7 +302,7 @@ module.exports = (data, name, watcher) ->
   if watcher?
     if watchers[name]
       for w in watchers[name]
-        w.close()
+        w?.close?()
     watchers[name] = []
   gw = watcher or null
   gn = name
