@@ -9,30 +9,35 @@ timers = {}
 wait = (time, func) ->
   setTimeout func, time
 
-startWatcher = (watcher, path) ->
-  globalWatcher = gw
-  globalName = gn
-  fs.exists path, (ya) ->
-    if ya
-      fileWatcher = fs.watch path
-      .on 'change', ->
-        unless timers[gn]?
-          timers[gn] = {}
-        unless timers[gn][path]?
-          timers[gn][path] = null
-        else
-          clearTimeout timers[gn][path]
-        timers[gn][path] = wait 25, ->
-          watcher.emit 'change', true
-          fileWatcher?.close()
-          rewatch watcher, path
-      if globalWatcher?
-        watchers[globalName].push fileWatcher
-    else
+startWatcher = (path) ->
+  fs.exists path, (e) ->
+    unless e
       console.log "\x1B[1;31mFile not exists: \x1b[1;37m #{path}\x1B[0m\n"
+      return
+    fileWatcher = fs.watch path, (action, pathChanged) ->
+      clearTimeout timers[pathChanged] if timers[pathChanged]?
+      timers[pathChanged] = wait 25, ->
+        # проходимся по подписанным на обновления вотчерам
+        for own i, w of watchers[path]
+          w?.emit? 'change', true
+        return
+      return
+    return
+  return
 
-rewatch = (watcher, path) ->
-  startWatcher watcher, path
+# чтобы следить за изменениями файла мы подписываемся на изменения
+subscribeChange = (pathChangedFile, pathCoreFile, coreWatchers) ->
+  unless watchers[pathChangedFile]?
+    watchers[pathChangedFile] = {}
+  watchers[pathChangedFile][pathCoreFile] = coreWatchers
+  startWatcher(pathChangedFile)
+
+# если за файлом следить не надо, то его следует исключить... Как? Список? Придётся...
+unsubscribeChange = (pathCoreFile) ->
+  for own i, collect of watchers
+    if collect.hasOwnProperty pathCoreFile
+      delete collect[pathCoreFile]
+  return
 
 cPreProcessor = (source, filename, indent = "") ->
   directives = [
@@ -192,7 +197,8 @@ cPreProcessor = (source, filename, indent = "") ->
               console.warn "before include exist character in #{filename}:#{line}"
               return ''
             out += buf + cPreProcessor fs.readFileSync(p).toString(), p, buf
-            startWatcher gw, p
+            subscribeChange p, gn, gw
+            # startWatcher gw, p
           when 1
           # define
             dm = word.trim().match def
@@ -299,14 +305,10 @@ cPreProcessor = (source, filename, indent = "") ->
   out # return cPreProcessor
 
 module.exports = (data, name, watcher) ->
-  if watcher?
-    if watchers[name]
-      for w in watchers[name]
-        w?.close?()
-    watchers[name] = []
   gw = watcher or null
   gn = name
 
+  unsubscribeChange name
   ret = cPreProcessor data, name, ''
 
   gw = null
