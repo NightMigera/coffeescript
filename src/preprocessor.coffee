@@ -32,7 +32,7 @@ subscribeChange = (pathChangedFile, pathCoreFile, coreWatchers) ->
   watchers[pathChangedFile][pathCoreFile] = coreWatchers
   startWatcher(pathChangedFile)
 
-# если за файлом следить не надо, то его следует исключить... Как? Список? Придётся...
+# перед тем, как пройдёт компиляция, все вотчеры отменяем
 unsubscribeChange = (pathCoreFile) ->
   for own i, collect of watchers
     if collect.hasOwnProperty pathCoreFile
@@ -82,10 +82,14 @@ cPreProcessor = (source, filename, indent = "") ->
   l = source.length
   line = 0
   define = (name, value) ->
-    if value?
-      makros[name] = value
-    else
+    unless value?
       makros[name] = ''
+      return
+    # тут мы анализируем  value на использование другими макросами
+    #define GO 123
+    #define SAK GO MUST // 123 MUST
+    #define DUCK GO SAK // 123 123 MUST
+    makros[name] = value
     return
   undef = (name) ->
     if name isnt ''
