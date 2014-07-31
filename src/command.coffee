@@ -158,7 +158,7 @@ findDirectoryIndex = (source) ->
 # `__dirname` and `module.filename` to be correct relative to the script's path.
 compileScript = (file, input, base = null, watcher = null) ->
   # search include and defines
-  input = pp input, file, watcher
+  input = pp input, file, watcher, opts
   o = opts
   options = compileOptions file, base
   try

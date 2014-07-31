@@ -1,7 +1,12 @@
+#@define WARN_STACK_SIZE 16
+#@define MAX_STACK_SIZE 32
+
 fs = require 'fs'
 path = require 'path'
-makros = {}
+makros = null # object tokens
 watchers = {} # watchers by filename
+systemPaths = []
+dirOpen = null # array history open dir
 gw = null # global watcher
 gn = '' # global name (path)
 timers = {}
@@ -14,7 +19,7 @@ startWatcher = (path) ->
     unless e
       console.log "\x1B[1;31mFile not exists: \x1b[1;37m #{path}\x1B[0m\n"
       return
-    fileWatcher = fs.watch path, (action, pathChanged) ->
+    fs.watch path, (action, pathChanged) ->
       clearTimeout timers[pathChanged] if timers[pathChanged]?
       timers[pathChanged] = wait 25, ->
         # проходимся по подписанным на обновления вотчерам
@@ -80,7 +85,8 @@ cPreProcessor = (source, filename, indent = "") ->
   ad = -1    # active dirrective
   i  = -1
   l = source.length
-  line = 0
+  line = 1
+
   define = (name, value) ->
     unless value?
       makros[name] = ''
@@ -89,8 +95,14 @@ cPreProcessor = (source, filename, indent = "") ->
     #define GO 123
     #define SAK GO MUST // 123 MUST
     #define DUCK GO SAK // 123 123 MUST
+    # а так же
+    #define A B B1
+    #define B C C1
+    #define C A A1
+    # A B C -> A A1 C1 B1 B B1 A1 C1 C C1 B1 A1
     makros[name] = value
     return
+
   undef = (name) ->
     if name isnt ''
       if makros.hasOwnProperty name
@@ -99,6 +111,109 @@ cPreProcessor = (source, filename, indent = "") ->
         console.warn "Index #{name} haven't in makros. Undef fail in #{filename}:#{line}"
     else
       console.warn "Undef is empty in #{filename}:#{line}"
+  # пытаемся заменить имя или переменную на значение со всеми подстановками
+  token = (name, stack = []) ->
+    # если макрос есть и он не отменён
+    if makros.hasOwnProperty(name) and makros[name]?
+      # проверяем длину стека (на всякий случай. Потом величину следует увеличить до 2048)
+      if stack.length > MAX_STACK_SIZE
+        console.warn "Tikeniz stak max size!!! fail in #{filename}:#{line}"
+        stack.pop()
+        return name
+      if stack.length > WARN_STACK_SIZE
+        console.warn "Tikeniz stak warn size: #{stack.length} fail in #{filename}:#{line}"
+      # при обнаружении циклической
+      if name in stack
+        stack.pop()
+        return name
+      val =  makros[name]
+      words = val.match(/\b\w+\b/g)
+      for w in words
+        stack.push(w)
+        val = val.replace(new RegExp("\\b#{w}\\b"), token(w, stack))
+      val
+    else
+      stack.pop()
+      name
+      
+  # include подключаем файл
+  include = (name, ident) ->
+    name = name.trim()
+    if name is '' or not name?
+      console.warn " Can't include file by empty path! #{filename}:#{line}"
+      return ''
+
+    if (c = name.charAt(0)) is '"' # " h-char-sequence"
+      if name.charAt(0) isnt name.charAt(name.length-1)
+        console.warn "Parse error: can't parse include path in #{filename}:#{line}"
+        return ''
+      p = name.substr(1, name.length - 2)
+      iv = 2
+    else if c is '<' # < h-char-sequence>
+      if name.charAt(name.length-1) isnt '>'
+        console.warn "Including system file not complete in #{filename}:#{line}"
+        return ''
+      p = name.substr(1, name.length - 2)
+      iv = 1
+    else # include pp-tokens
+      p = token(name)
+      if p is p
+        console.warn "Cannot find macro for #{p} in #{filename}:#{line}"
+        return ''
+      else if p is ''
+        console.warn "Can't include by empty path in #{filename}:#{line}"
+        return ''
+      return include p, ident
+
+    incPath = null
+    switch iv
+      when 1 # < >
+        if p.charAt(0) is '/'
+          console.warn "Path between < > can't start from / in #{filename}:#{line}"
+          return ''
+        # search in system dirs
+        for dir in systemPaths
+          if fs.existsSync dir + "/" + p
+            incPath = dir + '/' + p
+            break
+        break if incPath? # shit: break to label is not avialable
+        console.warn "File #{p} cannot find in system dirs. Error: #{filename}:#{line}"
+        return ''
+      when 2 # " "
+        if p.charAt(0) is '/'
+          console.warn "Absolute path is not safe! #{filename}:#{line}"
+          # find only one file
+          unless fs.existsSync p
+            console.warn "Include error: #{p} not exist in #{filename}:#{line}"
+            return ''
+          incPath = p
+          break
+        for dir in dirOpen by -1
+          if fs.existsSync dir + "/" + p
+            incPath = dir + "/" + p
+            break
+        break if incPath?
+        for dir in systemPaths
+          if fs.existsSync dir + "/" + p
+            incPath = dir + '/' + p
+            break
+        break if incPath?
+        console.warn "File #{p} cannot find. Error: #{filename}:#{line}"
+        return ''
+      else
+        console.error "O__o WTF!?" # impossible
+
+    unless incPath?
+      console.error "Include error. Can't find and not print warn and out"
+      return ''
+
+    dir = path.dirname(incPath) # dir must have dirname, это на всякий случай
+    unless dir in dirOpen # add history dir open
+      dirOpen.push dir
+    if gw?
+      subscribeChange p, gn, gw
+    # return
+    ident + cPreProcessor fs.readFileSync(incPath).toString(), incPath, ident
 
   while i++ < l
     c = source.charAt(i)
@@ -184,24 +299,7 @@ cPreProcessor = (source, filename, indent = "") ->
             d = false
           when 0
           # include
-            word = word.trim()
-            if qt.test word.charAt(0)
-              if word.charAt(0) isnt word.charAt(word.length-1)
-                console.warn "Parse error: can't parse include path in #{filename}:#{line}"
-                return ''
-              p = word.substr(1, word.length - 2)
-            else
-              p = word + '.coffee'
-            if p.charAt(0) isnt '/'
-              p = path.dirname(filename) + '/' + p
-            unless fs.existsSync p
-              console.warn "include error: #{p} not exist in #{filename}:#{line}"
-              return ''
-            unless sl.test buf
-              console.warn "before include exist character in #{filename}:#{line}"
-              return ''
-            out += buf + cPreProcessor fs.readFileSync(p).toString(), p, buf
-            subscribeChange p, gn, gw
+            out += include word, buf
             # startWatcher gw, p
           when 1
           # define
@@ -308,12 +406,29 @@ cPreProcessor = (source, filename, indent = "") ->
     out += buf
   out # return cPreProcessor
 
-module.exports = (data, name, watcher) ->
+optionParse = (opts) ->
+  for o in opts.arguments
+    if o.substr(0, 2) is '-I'
+      sp = o.substr(2).trim().replace(/\/$/, '')
+      unless sp in systemPaths
+        systemPaths.push sp
+  if process.env.hasOwnProperty('COFFEE_INCLUDE')
+    dirs = process.env.COFFEE_INCLUDE.split(':')
+    for o in dirs
+      o = o.trim().replace(/\/$/, '')
+      unless o in systemPaths
+        systemPaths.push o
+  return
+
+module.exports = (data, name, watcher, opts) ->
   gw = watcher or null
   gn = name
 
-  unsubscribeChange name
-  ret = cPreProcessor data, name, ''
+  optionParse(opts)
+  unsubscribeChange name # снимаем все существующие watcher-ы
+  makros = {} # обнуляем все ранее созданные определения
+  dirOpen = [path.dirname(name)]
+  ret = cPreProcessor data, name, '' # препроцессим!
 
   gw = null
   gn = ''
