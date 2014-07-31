@@ -25,7 +25,9 @@ exports.OptionParser = class OptionParser
   # parsers that allow you to attach callback actions for every flag. Instead,
   # you're responsible for interpreting the options object.
   parse: (args) ->
-    options = arguments: []
+    options =
+      arguments: []
+      params: []
     skippingArgument = no
     originalArgs = args
     args = normalizeArguments args
@@ -54,7 +56,10 @@ exports.OptionParser = class OptionParser
             break
         throw new Error "unrecognized option: #{arg}" if isOption and not matchedRule
       if seenNonOptionArg or not isOption
-        options.arguments.push arg
+        if arg.charAt(0) is '-'
+          options.params.push arg
+        else
+          options.arguments.push arg
     options
 
   # Return the help text for this **OptionParser**, listing and describing all

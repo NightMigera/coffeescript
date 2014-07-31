@@ -11,13 +11,59 @@ gw = null # global watcher
 gn = '' # global name (path)
 timers = {}
 
+if process? and not(/^win/.test process.platform)
+  styles =
+    'bold' : ['\x1B[1m', '\x1B[22m'],
+    'italic' : ['\x1B[3m', '\x1B[23m'],
+    'underline' : ['\x1B[4m', '\x1B[24m'],
+    'inverse' : ['\x1B[7m', '\x1B[27m'],
+    'strikethrough' : ['\x1B[9m', '\x1B[29m'],
+    #text colors
+    #grayscale
+    'white' : ['\x1B[37m', '\x1B[39m'],
+    'grey' : ['\x1B[90m', '\x1B[39m'],
+    'black' : ['\x1B[30m', '\x1B[39m'],
+    #colors
+    'blue' : ['\x1B[34m', '\x1B[39m'],
+    'cyan' : ['\x1B[36m', '\x1B[39m'],
+    'green' : ['\x1B[32m', '\x1B[39m'],
+    'magenta' : ['\x1B[35m', '\x1B[39m'],
+    'red' : ['\x1B[31m', '\x1B[39m'],
+    'yellow' : ['\x1B[33m', '\x1B[39m'],
+    #background colors
+    #grayscale
+    'whiteBG' : ['\x1B[47m', '\x1B[49m'],
+    'greyBG' : ['\x1B[49;5;8m', '\x1B[49m'],
+    'blackBG' : ['\x1B[40m', '\x1B[49m'],
+    #colors
+    'blueBG' : ['\x1B[44m', '\x1B[49m'],
+    'cyanBG' : ['\x1B[46m', '\x1B[49m'],
+    'greenBG' : ['\x1B[42m', '\x1B[49m'],
+    'magentaBG' : ['\x1B[45m', '\x1B[49m'],
+    'redBG' : ['\x1B[41m', '\x1B[49m'],
+    'yellowBG' : ['\x1B[43m', '\x1B[49m']
+  for own style of styles
+    do (style) ->
+      String::[style] = (val = '') ->
+        styles[style][0] + @ + val + styles[style][1]
+else
+  styles = [ 'bold', 'italic', 'underline', 'inverse', 'strikethrough'
+  #text colors
+    'white', 'grey', 'black', 'blue', 'cyan', 'green', 'magenta', 'red', 'yellow'
+  #background colors
+    'whiteBG', 'greyBG', 'blackBG', 'blueBG', 'cyanBG', 'greenBG', 'magentaBG', 'redBG', 'yellowBG',
+    ]
+  for style in styles
+    String::[style] = (val = '') ->
+      @ + val
+
 wait = (time, func) ->
   setTimeout func, time
 
 startWatcher = (path) ->
   fs.exists path, (e) ->
     unless e
-      console.log "\x1B[1;31mFile not exists: \x1b[1;37m #{path}\x1B[0m\n"
+      console.log "#{'File not exists:'.red()} #{path.white()}\n".bold()
       return
     fs.watch path, (action, pathChanged) ->
       clearTimeout timers[pathChanged] if timers[pathChanged]?
@@ -66,6 +112,7 @@ cPreProcessor = (source, filename, indent = "") ->
   buf = '' # line buffer
   f = 0
   q = 0b00000
+  source += '\n'
   # single quotes 0b0000001
   # double quotes 0b0000010
   # three qoutes  0b0000100
@@ -108,20 +155,20 @@ cPreProcessor = (source, filename, indent = "") ->
       if makros.hasOwnProperty name
         makros[name] = null
       else
-        console.warn "Index #{name} haven't in makros. Undef fail in #{filename}:#{line}"
+        console.warn "Index #{name.blue()} haven't in makros. Undef fail in #{filename.white()}:#{''.cyan(line)}".yellow()
     else
-      console.warn "Undef is empty in #{filename}:#{line}"
+      console.warn "Undef is empty in #{filename.white()}:#{''.cyan(line)}".yellow()
   # пытаемся заменить имя или переменную на значение со всеми подстановками
   token = (name, stack = []) ->
     # если макрос есть и он не отменён
     if makros.hasOwnProperty(name) and makros[name]?
       # проверяем длину стека (на всякий случай. Потом величину следует увеличить до 2048)
       if stack.length > MAX_STACK_SIZE
-        console.warn "Tikeniz stak max size!!! fail in #{filename}:#{line}"
+        console.warn "Tikeniz stak max size!!! fail in #{filename.white()}:#{''.cyan(line)}".yellow()
         stack.pop()
         return name
       if stack.length > WARN_STACK_SIZE
-        console.warn "Tikeniz stak warn size: #{stack.length} fail in #{filename}:#{line}"
+        console.warn "Tikeniz stak warn size: #{stack.length} fail in #{filename.white()}:#{''.cyan(line)}".yellow()
       # при обнаружении циклической
       if name in stack
         stack.pop()
@@ -140,28 +187,28 @@ cPreProcessor = (source, filename, indent = "") ->
   include = (name, ident) ->
     name = name.trim()
     if name is '' or not name?
-      console.warn " Can't include file by empty path! #{filename}:#{line}"
+      console.warn "Can't include file by empty path! #{filename.white()}:#{''.cyan(line)}".yellow()
       return ''
 
     if (c = name.charAt(0)) is '"' # " h-char-sequence"
       if name.charAt(0) isnt name.charAt(name.length-1)
-        console.warn "Parse error: can't parse include path in #{filename}:#{line}"
+        console.warn "Parse error: can't parse include path in #{filename.white()}:#{''.cyan(line)}".yellow()
         return ''
       p = name.substr(1, name.length - 2)
       iv = 2
     else if c is '<' # < h-char-sequence>
       if name.charAt(name.length-1) isnt '>'
-        console.warn "Including system file not complete in #{filename}:#{line}"
+        console.warn "Including system file not complete in #{filename.white()}:#{''.cyan(line)}".yellow()
         return ''
       p = name.substr(1, name.length - 2)
       iv = 1
     else # include pp-tokens
       p = token(name)
       if p is p
-        console.warn "Cannot find macro for #{p} in #{filename}:#{line}"
+        console.warn "Cannot find macro for #{p.white().bold()} in #{filename.white()}:#{''.cyan(line)}".yellow()
         return ''
       else if p is ''
-        console.warn "Can't include by empty path in #{filename}:#{line}"
+        console.warn "Can't include by empty path in #{filename.white()}:#{''.cyan(line)}".yellow()
         return ''
       return include p, ident
 
@@ -169,7 +216,7 @@ cPreProcessor = (source, filename, indent = "") ->
     switch iv
       when 1 # < >
         if p.charAt(0) is '/'
-          console.warn "Path between < > can't start from / in #{filename}:#{line}"
+          console.warn "Path between < > can't start from / in #{filename.white()}:#{''.cyan(line)}".yellow()
           return ''
         # search in system dirs
         for dir in systemPaths
@@ -177,14 +224,14 @@ cPreProcessor = (source, filename, indent = "") ->
             incPath = dir + '/' + p
             break
         break if incPath? # shit: break to label is not avialable
-        console.warn "File #{p} cannot find in system dirs. Error: #{filename}:#{line}"
+        console.warn "File #{p.white().bold()} cannot find in system dirs. Error: #{filename.white()}:#{''.cyan(line)}".yellow()
         return ''
       when 2 # " "
         if p.charAt(0) is '/'
-          console.warn "Absolute path is not safe! #{filename}:#{line}"
+          console.warn "Absolute path is not safe! #{filename.white()}:#{''.cyan(line)}".yellow()
           # find only one file
           unless fs.existsSync p
-            console.warn "Include error: #{p} not exist in #{filename}:#{line}"
+            console.warn "Include error: #{p.white().bold()} not exist in #{filename.white()}:#{''.cyan(line)}".yellow()
             return ''
           incPath = p
           break
@@ -198,20 +245,20 @@ cPreProcessor = (source, filename, indent = "") ->
             incPath = dir + '/' + p
             break
         break if incPath?
-        console.warn "File #{p} cannot find. Error: #{filename}:#{line}"
+        console.warn "File #{p.white().bold()} cannot find. Error: #{filename.white()}:#{''.cyan(line)}".yellow()
         return ''
       else
-        console.error "O__o WTF!?" # impossible
+        console.error "O__o WTF!?".red().bold() # impossible
 
     unless incPath?
-      console.error "Include error. Can't find and not print warn and out"
+      console.error "Include error. Can't find and not print warn and out".red().bold()
       return ''
 
     dir = path.dirname(incPath) # dir must have dirname, это на всякий случай
     unless dir in dirOpen # add history dir open
       dirOpen.push dir
     if gw?
-      subscribeChange p, gn, gw
+      subscribeChange incPath, gn, gw
     # return
     ident + cPreProcessor fs.readFileSync(incPath).toString(), incPath, ident
 
@@ -280,7 +327,7 @@ cPreProcessor = (source, filename, indent = "") ->
           else
             ad = directives.indexOf(word)
             if ad is -1
-              console.warn "cannot find preprocessor directive #{word}  in #{filename}:#{line}"
+              console.warn "cannot find preprocessor directive #{word.bold()}  in #{filename.white()}:#{''.cyan(line)}".yellow()
             word = ''
         else
           word += c
@@ -305,7 +352,7 @@ cPreProcessor = (source, filename, indent = "") ->
           # define
             dm = word.trim().match def
             unless dm?
-              console.warn "Define #{word} fail in #{filename}:#{line}"
+              console.warn "Define #{word} fail in #{filename.white()}:#{''.cyan(line)}".yellow()
             define dm[1], dm[2]
           when 2
           # undef
@@ -319,7 +366,7 @@ cPreProcessor = (source, filename, indent = "") ->
           when 4
           # elif
             if ifactive is 0
-              console.warn "elif without #if in #{filename}:#{line}"
+              console.warn "elif without #if in #{filename.white()}:#{''.cyan(line)}".yellow()
               return ""
             if ifpassed
               i = source.lastIndexOf("\n", source.indexOf("#@endif", i))
@@ -336,7 +383,7 @@ cPreProcessor = (source, filename, indent = "") ->
           when 5
           # else
             if ifactive is 0
-              console.warn "else without #if in #{filename}:#{line}"
+              console.warn "else without #if in #{filename.white()}:#{''.cyan(line)}".yellow()
               return ""
             if ifpassed
               i = source.lastIndexOf("\n", source.indexOf("#@endif", i))
@@ -350,10 +397,10 @@ cPreProcessor = (source, filename, indent = "") ->
           when 6
           # endif
             if ifactive is 0
-              console.warn "endif without #if in #{filename}:#{line}"
+              console.warn "endif without #if in #{filename.white()}:#{''.cyan(line)}".yellow()
               return ""
             unless sl.test word
-              console.warn "endif not empty in #{filename}:#{line}"
+              console.warn "endif not empty in #{filename.white()}:#{''.cyan(line)}".yellow()
             ifactive--
             ifpassed = ifactive isnt 0
           when 7
@@ -365,7 +412,7 @@ cPreProcessor = (source, filename, indent = "") ->
             ifactive++
             ifpassed = iftrue = not (makros.hasOwnProperty(word) and makros[word]?)
           else
-            console.log "What!? in #{filename}:#{line}"
+            console.log "What!? in #{filename.white()}:#{''.cyan(line)}".yellow()
         # clean
         ad = -1
         d = false
@@ -404,10 +451,11 @@ cPreProcessor = (source, filename, indent = "") ->
       s = false
   if c is ""
     out += buf
-  out # return cPreProcessor
+  # return cPreProcessor
+  out.substr(0, out.length - 1) # without \n
 
 optionParse = (opts) ->
-  for o in opts.arguments
+  for o in opts.params
     if o.substr(0, 2) is '-I'
       sp = o.substr(2).trim().replace(/\/$/, '')
       unless sp in systemPaths
