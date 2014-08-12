@@ -103,10 +103,10 @@ cPreProcessor = (source, filename, indent = "") ->
     'ifndef'
   ]
   word = ''
-  an = /\w/
-  qt = /'|"/
+  an = /^\w$/
   sl = /^\s*$/
   def = /^(\w+)(?:\s+(.*))?$/
+  n = /\n/g
   dm = null
   out = ''
   buf = '' # line buffer
@@ -124,29 +124,27 @@ cPreProcessor = (source, filename, indent = "") ->
   cl = false # comment line
   d = false # dirrective
   sd = false # start directive
-  os = false
-  ba = false
+  #os = false
+  ba = false # block active
+  di = false # define makro replacement ignore
   iftrue = false # width ifactive, if true, copy text on
   ifactive = 0 # active use block
   ifpassed = false # if find active block for else and elif
   ad = -1    # active dirrective
   i  = -1
+  i2 = -1
   l = source.length
   line = 1
+  nfound = null # use for find count \n in skipped block
 
+  #define A B B1
+  #define B C C1
+  #define C A A1
+  # A B C -> A A1 C1 B1 B B1 A1 C1 C C1 B1 A1
   define = (name, value) ->
     unless value?
       makros[name] = ''
       return
-    # тут мы анализируем  value на использование другими макросами
-    #define GO 123
-    #define SAK GO MUST // 123 MUST
-    #define DUCK GO SAK // 123 123 MUST
-    # а так же
-    #define A B B1
-    #define B C C1
-    #define C A A1
-    # A B C -> A A1 C1 B1 B B1 A1 C1 C C1 B1 A1
     makros[name] = value
     return
 
@@ -158,6 +156,7 @@ cPreProcessor = (source, filename, indent = "") ->
         console.warn "Index #{name.blue()} haven't in makros. Undef fail in #{filename.white()}:#{''.cyan(line)}".yellow()
     else
       console.warn "Undef is empty in #{filename.white()}:#{''.cyan(line)}".yellow()
+
   # пытаемся заменить имя или переменную на значение со всеми подстановками
   token = (name, stack = []) ->
     # если макрос есть и он не отменён
@@ -173,10 +172,10 @@ cPreProcessor = (source, filename, indent = "") ->
       if name in stack
         stack.pop()
         return name
+      stack.push(name)
       val =  makros[name]
       words = val.match(/\b\w+\b/g)
       for w in words
-        stack.push(w)
         val = val.replace(new RegExp("\\b#{w}\\b"), token(w, stack))
       val
     else
@@ -261,22 +260,25 @@ cPreProcessor = (source, filename, indent = "") ->
       subscribeChange incPath, gn, gw
     # return
     ident + cPreProcessor fs.readFileSync(incPath).toString(), incPath, ident
+  # include end
 
   while i++ < l
     c = source.charAt(i)
     if c is '\\' # if after backslash new line split into line
       if source.substr(i + 1, 2) is '\n#'
         i += 3
+        line++
         continue
       else if source.substr(i + 1, 2) is '\r\n#'
         i += 4
+        line++
         continue
     ba = ifactive is 0 or iftrue
     unless ba
       s = true
     switch c
       when "'", "`" # single quotes, js source
-        f = if c is "'" then 0b001 else 0b100000
+        f = if c is "'" then 0b0000001 else 0b0100000
         unless cl
           if q is 0
             q = f
@@ -285,11 +287,11 @@ cPreProcessor = (source, filename, indent = "") ->
         f = 0
       when '/', '"' # slash or double quotes
         if source.charAt(i+1) is c and source.charAt(i+2) is c # if /// detected
-          f = if c is '/' then 0b01000 else 0b100
+          f = if c is '/' then 0b0001000 else 0b0000100
           i += 2
           buf += c + c if ba
         else
-          f = if c is '/' then 0b1000000 else 0b10
+          f = if c is '/' then 0b1000000 else 0b0000010
         unless cl
           if q is 0
             q = f
@@ -301,7 +303,7 @@ cPreProcessor = (source, filename, indent = "") ->
           os = true
           break
         if source.charAt(i+1) is c and source.charAt(i+2) is c # if ### detected
-          f = 0b10000
+          f = 0b0010000
           i += 2
           buf += '##' if ba
         else if source.charAt(i+1) isnt '@' # comment detected
@@ -309,7 +311,7 @@ cPreProcessor = (source, filename, indent = "") ->
         else unless cl
           sd = true
         q = f
-        if sd and q isnt 0b10000 # if #@ and not comment
+        if sd and q isnt 0b0010000 # if #@ and not comment
           d = true # устанавливаем флаг диррективы
           s = true
           i++
@@ -332,13 +334,14 @@ cPreProcessor = (source, filename, indent = "") ->
         else
           word += c
       else # if end of line
-        if ad is -1 and word isnt '' # for 'else' and 'andif'
+        if ad is -1 and word isnt '' # for 'else' and 'endif'
           ad = directives.indexOf(word)
           word = ''
         if ifactive > 0 and not iftrue and not (4 <= ad <= 6) # if find
           i = source.indexOf('\n', i) - 1
           d = false
           ad = -1
+          line++
           continue
         switch ad
           when -1
@@ -369,12 +372,18 @@ cPreProcessor = (source, filename, indent = "") ->
               console.warn "elif without #if in #{filename.white()}:#{''.cyan(line)}".yellow()
               return ""
             if ifpassed
-              i = source.lastIndexOf("\n", source.indexOf("#@endif", i))
+              i2 = source.lastIndexOf("\n", source.indexOf("#@endif", i))
               ad = -1
               d = false
+              if i2 is -1
+                console.warn "endif not found in #{filename.white()}:#{''.cyan(line)}".yellow()
+                return ""
               word = ''
               buf = ''
               iftrue = false
+              nfound = source.substring(i, i2).match(n)
+              line += (nfound?.length or 0) + 1
+              i = i2
               continue
             if iftrue
               iftrue = false
@@ -386,12 +395,18 @@ cPreProcessor = (source, filename, indent = "") ->
               console.warn "else without #if in #{filename.white()}:#{''.cyan(line)}".yellow()
               return ""
             if ifpassed
-              i = source.lastIndexOf("\n", source.indexOf("#@endif", i))
+              i2 = source.lastIndexOf("\n", source.indexOf("#@endif", i))
               ad = -1
               d = false
+              if i2 is -1
+                console.warn "endif not found in #{filename.white()}:#{''.cyan(line)}".yellow()
+                return ""
               word = ''
               buf = ''
               iftrue = false
+              nfound = source.substring(i, i2).match(n)
+              line += (nfound?.length or 0) + 1
+              i = i2
               continue
             iftrue = not iftrue
           when 6
@@ -424,19 +439,19 @@ cPreProcessor = (source, filename, indent = "") ->
         if an.test c
           word += c
         else
-          if makros.hasOwnProperty(word) and makros[word]?
+          wr = if word is '' then '' else token(word)
+          if wr isnt word
             if buf.charAt(buf.length - 1) is ' '
-              buf += makros[word]
+              buf += wr
             else
-              buf += ' ' + makros[word]
-            if source.charAt(i + 1) isnt ' '
+              buf += ' ' + wr
+            if c isnt ' '
               buf += ' '
           else
             buf += word
           word = ''
           buf += c
       s = true
-    # end switch
     if c is '\n'
       line++
       c += indent
