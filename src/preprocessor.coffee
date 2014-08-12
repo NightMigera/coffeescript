@@ -131,11 +131,11 @@ cPreProcessor = (source, filename, indent = "") ->
   ifactive = 0 # active use block
   ifpassed = false # if find active block for else and elif
   ad = -1    # active dirrective
-  i  = -1
-  i2 = -1
+  i  = -1    # character index
+  i2 = -1    # character index for locale search
+  line = 1   # line number
+  nfound = 0 # use for find count NL in skipped block
   l = source.length
-  line = 1
-  nfound = null # use for find count \n in skipped block
 
   #define A B B1
   #define B C C1

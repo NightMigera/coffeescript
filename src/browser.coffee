@@ -74,8 +74,7 @@ runScripts = ->
           (param) ->
             coffees[i] = param
             execute()
-          options
-          true
+          , options, true
       else
         options.sourceFiles = ['embedded']
         coffees[i] = [script.innerHTML, options]
