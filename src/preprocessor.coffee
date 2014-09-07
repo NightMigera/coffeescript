@@ -106,8 +106,19 @@ cPreProcessor = (source, filename, indent = "") ->
   an = /^\w$/
   sl = /^\s*$/
   def = /^(\w+)(?:\s+(.*))?$/
+  def = ///
+(\w+)
+(
+\(\s*
+  (\.\.\.|(\w+\s*
+    (,\s*\w+\s*)*
+    (,\s*\.\.\.)?
+  ))
+  \s*\)
+)?
+(\s+.*)?
+    ///
   n = /\n/g
-  makroReplaceFunc = /\w+\(...|\w+\)\s+.+/
   dm = null
   out = ''
   buf = '' # line buffer
