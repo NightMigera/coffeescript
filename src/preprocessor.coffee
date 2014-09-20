@@ -106,7 +106,7 @@ cPreProcessor = (source, filename, indent = "") ->
   an = /^\w$/
   sl = /^\s*$/
   def = /^(\w+)(?:\s+(.*))?$/
-  def = ///
+  defFull = ///^
 (\w+)
 (
 \(\s*
@@ -117,7 +117,7 @@ cPreProcessor = (source, filename, indent = "") ->
   \s*\)
 )?
 (\s+.*)?
-    ///
+    $///
   n = /\n/g
   dm = null
   out = ''
