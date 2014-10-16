@@ -92,7 +92,7 @@ unsubscribeChange = (pathCoreFile) ->
 
 cPreProcessor = (source, filename, indent = "") ->
   directives = [
-    'include', # 'path' or path/to/file/without/extensiion
+    'include', # 'path.coffee' or path/to/file/without/extensiion
     'define', # apply [a-zA-Z0-9_] (or \w)
     'undef'
     'if'
@@ -221,7 +221,7 @@ cPreProcessor = (source, filename, indent = "") ->
     else
       stack.pop()
       name
-      
+
   # include подключаем файл
   include = (name, ident) ->
     name = name.trim()
@@ -322,6 +322,7 @@ cPreProcessor = (source, filename, indent = "") ->
 
   while i++ < l
     c = source.charAt(i)
+    c2 = source.charAt(i + 1)
     if c is '\\' # if after backslash new line split into line
       if source.substr(i + 1, 2) is '\n#'
         i += 3
@@ -349,7 +350,7 @@ cPreProcessor = (source, filename, indent = "") ->
             replace = true
           f = 0
         when '/', '"' # slash or double quotes
-          if source.charAt(i+1) is c and source.charAt(i+2) is c # if /// detected
+          if c2 is c and source.charAt(i+2) is c # if /// detected
             f = if c is '/' then BLOCK_RM else BLOCK_TQ
             i += 2
             buf += c + c if ba
@@ -362,14 +363,15 @@ cPreProcessor = (source, filename, indent = "") ->
               q = 0
           f = 0
         when '#'
-          if q isnt 0
-            os = true
+          if q isnt 0 and q isnt BLOCK_CM
             break
-          if source.charAt(i+1) is c and source.charAt(i+2) is c # if ### detected
+          if c2 is c and source.charAt(i+2) is c # if ### detected
             f = BLOCK_CM
             i += 2
             buf += '##' if ba
-          else if source.charAt(i+1) isnt '@' # comment detected
+            if q is f
+              f = 0
+          else if c2 isnt '@' # comment detected
             cl = true
           else unless cl
             sd = true
@@ -513,21 +515,24 @@ cPreProcessor = (source, filename, indent = "") ->
       s = true
     else
       if ba
-        if an.test c
+        if isw = an.test c
           word += c
+          # s = true
         else
+          buf += c
+        if isw and not an.test c2
           wr = if word is '' then '' else token(word)
           if wr isnt word
             if buf.charAt(buf.length - 1) is ' '
               buf += wr
             else
               buf += ' ' + wr
-            if c isnt ' '
+            if c2 isnt ' '
               buf += ' '
           else
             buf += word
           word = ''
-          buf += c
+          # buf += c
       s = true
     if c is '\n'
       line++
