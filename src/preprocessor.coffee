@@ -496,6 +496,7 @@ cPreProcessor = (source, filename, indent = "") ->
               #console.warn "endif not empty in #{filename.white()}:#{''.cyan(line)}".yellow()
             ifactive--
             ifpassed = ifactive isnt 0
+            iftrue = true
           when 7
           # ifdef
             ifactive++
