@@ -58,3 +58,34 @@ If you'd like to chat, drop by #coffeescript on Freenode IRC.
 The source repository: https://github.com/jashkenas/coffeescript.git
 
 Our lovely and talented contributors are listed here: http://github.com/jashkenas/coffeescript/contributors
+
+## Preprocessor directives
+
+C-style directive *text* preprocessor standard ISO 3337 (width annotation by coffee):
+
+Partial standard:
+```@#define VAR value for define```
+support cyclic tokenize, not support function-style macros, -D flags compiler
+
+Full standard:
+```#@include "path/to/include/file.coffee```
+support full nuance include by C11 standard (-I flags, search directories),
+and save indent for included files
+
+Condition statements:
+```#@if 1 > 0
+console.log "1 > 0"
+#@else
+console.log "1 < 0"
+#@endif
+```
+
+output.js line: `console.log "1 < 0"`
+
+As well as:
+
+```#@undef MAKROS
+#@ifdef TRUE_IF_MAKROS_DEFINED
+#@ifndef TRUE_IF_MAKROS_NOT_DEFINED
+#@elif EXPR
+```
