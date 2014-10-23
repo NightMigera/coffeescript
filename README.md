@@ -61,7 +61,9 @@ Our lovely and talented contributors are listed here: http://github.com/jashkena
 
 ## Preprocessor directives
 
-C-style directive *text* preprocessor standard ISO 3337 (width annotation by coffee):
+C-style directive *text* preprocessor standard ISO 3337 (width annotation by coffee).
+Can be used width --watch.
+Can't be used width --map
 
 Partial standard:
 ```@#define VAR value for define```
@@ -82,7 +84,7 @@ Condition statements:
     #@endif
 ```
 
-output.js line: ```console.log "1 < 0"```
+output.js line: ```console.log("1 < 0")```
 
 As well as:
 
