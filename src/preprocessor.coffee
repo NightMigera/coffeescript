@@ -94,13 +94,13 @@ cPreProcessor = (source, filename, indent = "") ->
   directives = [
     'include', # 'path.coffee' or path/to/file/without/extensiion
     'define', # apply [a-zA-Z0-9_] (or \w)
-    'undef'
-    'if'
-    'elif'
-    'else'
-    'endif'
-    'ifdef'
-    'ifndef'
+    'undef'   # 2
+    'if'      # 3
+    'elif'    # 4
+    'else'    # 5
+    'endif'   # 6
+    'ifdef'   # 7
+    'ifndef'  # 8
   ]
   word = ''
   an = /^\w$/
@@ -158,9 +158,17 @@ cPreProcessor = (source, filename, indent = "") ->
   #os = false
   ba = false # block active
   di = false # define makro replacement ignore
-  iftrue = false # width ifactive, if true, copy text on
   ifactive = 0 # active use block
-  ifpassed = false # if find active block for else and elif
+  ifState = [[true, true]] # active block statement as old [iftrue, ifpassed] Becouse 0-level it base code all true.
+  # note:
+  #  iftrue = false # width ifactive, if true, copy text on
+  #  ifpassed = false # if find active block for else and elif
+  
+  # converted to
+  #@define IF_TRUE ifState[ifactive][0]
+  #@define IF_PASSED ifState[ifactive][1]
+  #@define IF_PARENT_TRUE ifState[ifactive - 1][0]
+
   ad = -1    # active dirrective
   i  = -1    # character index
   i2 = -1    # character index for locale search
@@ -332,7 +340,7 @@ cPreProcessor = (source, filename, indent = "") ->
         i += 4
         line++
         continue
-    ba = ifactive is 0 or iftrue
+    ba = ifactive is 0 or IF_TRUE
     unless ba
       s = true
     unless ecran
@@ -408,12 +416,12 @@ cPreProcessor = (source, filename, indent = "") ->
         if ad is -1 and word isnt '' # for 'else' and 'endif'
           ad = directives.indexOf(word)
           word = ''
-        if ifactive > 0 and not iftrue and not (4 <= ad <= 6) # if find
-          i = source.indexOf('\n', i) - 1
-          d = false
-          ad = -1
-          line++
-          continue
+        if ifactive > 0 and not IF_TRUE and ad < 3 # not correcting struct
+            i = source.indexOf('\n', i) - 1
+            d = false
+            ad = -1
+            line++
+            continue
         switch ad
           when -1
           # if \n after #@ or fail name directive
@@ -435,56 +443,37 @@ cPreProcessor = (source, filename, indent = "") ->
           when 3
           # if
             ifactive++
-            if eval word
-              iftrue = true
-              ifpassed = true
+            unless IF_PARENT_TRUE # if basic block is false current block can't be true
+              ifState[ifactive] = [false, false]
+            else if eval word
+              ifState[ifactive] = [true, true]
+            else
+              ifState[ifactive] = [false, false]
           when 4
           # elif
             if ifactive is 0
               warn "#elif without #if"
               #console.warn "elif without #if in #{filename.white()}:#{''.cyan(line)}".yellow()
               return ""
-            if ifpassed
-              i2 = source.lastIndexOf("\n", source.indexOf("#@endif", i))
-              ad = -1
-              d = false
-              if i2 is -1
-                warn "#endif not found"
-                #console.warn "#endif not found in #{filename.white()}:#{''.cyan(line)}".yellow()
-                return ""
-              word = ''
-              buf = ''
-              iftrue = false
-              nfound = source.substring(i, i2).match(n)
-              line += (nfound?.length or 0) + 1
-              i = i2
-              continue
-            if iftrue
-              iftrue = false
+            # if prev block is true, elif not active anymay
+            if IF_PASSED
+              IF_TRUE = false
+            # if parent false
+            else unless IF_PARENT_TRUE
+              IF_TRUE = IF_PASSED = false
+            # chance! Try word foractivate block! 3 level security passed!
             else if eval word
-              iftrue = true
+              IF_PASSED = IF_TRUE = true
           when 5
           # else
             if ifactive is 0
               warn "#else without #if"
               #console.warn "else without #if in #{filename.white()}:#{''.cyan(line)}".yellow()
               return ""
-            if ifpassed
-              i2 = source.lastIndexOf("\n", source.indexOf("#@endif", i))
-              ad = -1
-              d = false
-              if i2 is -1
-                warn "#endif not found"
-                #console.warn "endif not found in #{filename.white()}:#{''.cyan(line)}".yellow()
-                return ""
-              word = ''
-              buf = ''
-              iftrue = false
-              nfound = source.substring(i, i2).match(n)
-              line += (nfound?.length or 0) + 1
-              i = i2
-              continue
-            iftrue = not iftrue
+            unless IF_PARENT_TRUE
+              IF_TRUE = IF_PASSED = false
+            else if not IF_PASSED
+              IF_TRUE = IF_PASSED = true
           when 6
           # endif
             if ifactive is 0
@@ -495,16 +484,18 @@ cPreProcessor = (source, filename, indent = "") ->
               warn "#endif not empty"
               #console.warn "endif not empty in #{filename.white()}:#{''.cyan(line)}".yellow()
             ifactive--
-            ifpassed = ifactive isnt 0
-            iftrue = true
           when 7
           # ifdef
             ifactive++
-            ifpassed = iftrue = (makros.hasOwnProperty(word) and makros[word]?)
+            ifState[ifactive] = [false, false]
+            if IF_PARENT_TRUE
+              IF_TRUE = IF_PASSED = (makros.hasOwnProperty(word) and makros[word]?)
           when 8
           # ifndef
             ifactive++
-            ifpassed = iftrue = not (makros.hasOwnProperty(word) and makros[word]?)
+            ifState[ifactive] = [false, false]
+            if IF_PARENT_TRUE
+              IF_TRUE = IF_PASSED = not (makros.hasOwnProperty(word) and makros[word]?)
           else
             warn "What!?"
             #console.log "What!? in #{filename.white()}:#{''.cyan(line)}".yellow()
