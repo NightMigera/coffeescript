@@ -73,6 +73,7 @@ support full nuance include by C11 standard (-I flags, search directories),
 and save indent for included files
 
 Condition statements:
+
 ```#@if 1 > 0
 console.log "1 > 0"
 #@else
@@ -80,7 +81,7 @@ console.log "1 < 0"
 #@endif
 ```
 
-output.js line: `console.log "1 < 0"`
+output.js line: ```console.log "1 < 0"```
 
 As well as:
 
