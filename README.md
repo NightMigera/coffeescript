@@ -74,19 +74,24 @@ and save indent for included files
 
 Condition statements:
 
-```#@if 1 > 0
-console.log "1 > 0"
-#@else
-console.log "1 < 0"
-#@endif
+```
+    #@if 1 > 0
+    console.log "1 > 0"
+    #@else
+    console.log "1 < 0"
+    #@endif
 ```
 
 output.js line: ```console.log "1 < 0"```
 
 As well as:
 
-```#@undef MAKROS
-#@ifdef TRUE_IF_MAKROS_DEFINED
-#@ifndef TRUE_IF_MAKROS_NOT_DEFINED
-#@elif EXPR
+```
+
+    #@undef MAKROS
+    #@ifdef TRUE_IF_MAKROS_DEFINED
+
+    #@ifndef TRUE_IF_MAKROS_NOT_DEFINED
+
+    #@elif EXPR
 ```
