@@ -222,6 +222,7 @@ cPreProcessor = (source, filename, indent = "") ->
         return name
       stack.push(name)
       val =  makros[name]
+      return val if val is ""
       words = val.match(/\b\w+\b/g)
       for w in words
         val = val.replace(new RegExp("\\b#{w}\\b"), token(w, stack))
