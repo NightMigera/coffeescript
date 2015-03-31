@@ -105,6 +105,7 @@ cPreProcessor = (source, filename, indent = "") ->
   word = ''
   an = /^\w$/
   sl = /^\s*$/
+  space = /^\s\s*$/
   def = /^(\w+)(?:\s+(.*))?$/
   defFull = ///^
 (\w+)
@@ -222,10 +223,10 @@ cPreProcessor = (source, filename, indent = "") ->
         return name
       stack.push(name)
       val =  makros[name]
-      return val if val is ""
       words = val.match(/\b\w+\b/g)
-      for w in words
-        val = val.replace(new RegExp("\\b#{w}\\b"), token(w, stack))
+      if words?
+        for w in words
+          val = val.replace(new RegExp("\\b#{w}\\b"), token(w, stack))
       val
     else
       stack.pop()
@@ -364,7 +365,7 @@ cPreProcessor = (source, filename, indent = "") ->
             i += 2
             buf += c + c if ba
           else
-            f = if c is '/' then BLOCK_RE else BLOCK_DQ
+            f = if c is '/' then (unless c2.match(space) then BLOCK_RE else 0) else BLOCK_DQ
           unless cl
             if q is 0
               q = f
