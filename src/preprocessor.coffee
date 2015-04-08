@@ -185,7 +185,7 @@ cPreProcessor = (source, filename, indent = "") ->
   # A B C -> A A1 C1 B1 B B1 A1 C1 C C1 B1 A1
   define = (name, value) ->
     unless value?
-      makros[name] = ''
+      makros[name] = name
       return
     makros[name] = value
     return
@@ -551,6 +551,9 @@ optionParse = (opts) ->
       sp = o.substr(2).trim().replace(/\/$/, '')
       unless sp in systemPaths
         systemPaths.push sp
+    else if o.substr(0, 2) is '-D'
+      externalDefine = o.substr(2).trim().replace(/\/$/, '')
+      makros[externalDefine] = externalDefine
   if process.env.hasOwnProperty('COFFEE_INCLUDE')
     dirs = process.env.COFFEE_INCLUDE.split(':')
     for o in dirs
@@ -563,9 +566,9 @@ module.exports = (data, name, watcher, opts) ->
   gw = watcher or null
   gn = name
 
-  optionParse(opts)
-  unsubscribeChange name # снимаем все существующие watcher-ы
   makros = {} # обнуляем все ранее созданные определения
+  optionParse(opts) # снова парсим все переменные
+  unsubscribeChange name # снимаем все существующие watcher-ы
   dirOpen = [path.dirname(name)]
   ret = cPreProcessor data, name, '' # препроцессим!
 
