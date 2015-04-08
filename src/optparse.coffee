@@ -80,7 +80,7 @@ exports.OptionParser = class OptionParser
 # Regex matchers for option flags.
 LONG_FLAG  = /^(--\w[\w\-]*)/
 SHORT_FLAG = /^(-\w)$/
-MULTI_FLAG = /^-([^\WD]{2,})/
+MULTI_FLAG = /^-([^\WDI]{2,})/
 OPTIONAL   = /\[(\w+(\*?))\]/
 
 # Build and return the list of option rules. If the optional *short-flag* is
